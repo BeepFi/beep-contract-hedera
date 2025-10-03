@@ -11,8 +11,18 @@ interface IERC20 {
 contract BeepContract {
     address public constant HBAR = address(0);
 
-    enum IntentStatus { Active, Completed, Expired, Cancelled }
-    enum Priority { Low, Normal, High, Urgent }
+    enum IntentStatus {
+        Active,
+        Completed,
+        Expired,
+        Cancelled
+    }
+    enum Priority {
+        Low,
+        Normal,
+        High,
+        Urgent
+    }
 
     struct BeepCoin {
         address token;
@@ -78,11 +88,7 @@ contract BeepContract {
     error InsufficientAllowance();
     error TokenTransferFailed();
 
-    constructor(
-        address[] memory supportedTokens,
-        string[] memory supportedProtocols,
-        uint64 defaultTimeoutHeight
-    ) {
+    constructor(address[] memory supportedTokens, string[] memory supportedProtocols, uint64 defaultTimeoutHeight) {
         config.admin = msg.sender;
         config.supportedTokens = supportedTokens;
         config.supportedProtocols = supportedProtocols;
@@ -165,11 +171,7 @@ contract BeepContract {
         return id;
     }
 
-    function fillIntent(
-        string memory intentId,
-        bool useWalletBalance,
-        bool allowPaymasterFallback
-    ) public payable {
+    function fillIntent(string memory intentId, bool useWalletBalance, bool allowPaymasterFallback) public payable {
         Intent storage intent = intents[intentId];
         if (intent.status != IntentStatus.Active) revert IntentNotActive();
 
@@ -212,12 +214,20 @@ contract BeepContract {
         intent.status = IntentStatus.Completed;
 
         for (uint256 i = 0; i < intent.inputTokens.length; i++) {
+            if (intent.inputTokens[i].isNative && address(this).balance < intent.inputTokens[i].amount) {
+                revert InsufficientBalance();
+            }
             transferFromContract(msg.sender, intent.inputTokens[i]);
+        }
+        if (intent.tip.isNative && address(this).balance < intent.tip.amount) {
+            revert InsufficientBalance();
         }
         transferFromContract(msg.sender, intent.tip);
 
         for (uint256 i = 0; i < intent.outputTokens.length; i++) {
-            address recipient = intent.outputTokens[i].targetAddress == address(0) ? intent.creator : intent.outputTokens[i].targetAddress;
+            address recipient = intent.outputTokens[i].targetAddress == address(0)
+                ? intent.creator
+                : intent.outputTokens[i].targetAddress;
             BeepCoin memory coin = BeepCoin({
                 token: intent.outputTokens[i].token,
                 isNative: intent.outputTokens[i].isNative,
@@ -248,8 +258,16 @@ contract BeepContract {
         intent.status = IntentStatus.Cancelled;
 
         for (uint256 i = 0; i < intent.inputTokens.length; i++) {
+            if (intent.inputTokens[i].isNative && address(this).balance < intent.inputTokens[i].amount) {
+                revert InsufficientBalance();
+            }
             transferFromContract(msg.sender, intent.inputTokens[i]);
         }
+        // Refund the tip
+        if (intent.tip.isNative && address(this).balance < intent.tip.amount) {
+            revert InsufficientBalance();
+        }
+        transferFromContract(msg.sender, intent.tip);
 
         delete escrow[msg.sender][intentId];
 
@@ -273,8 +291,16 @@ contract BeepContract {
         intent.status = IntentStatus.Expired;
 
         for (uint256 i = 0; i < intent.inputTokens.length; i++) {
+            if (intent.inputTokens[i].isNative && address(this).balance < intent.inputTokens[i].amount) {
+                revert InsufficientBalance();
+            }
             transferFromContract(msg.sender, intent.inputTokens[i]);
         }
+        // Refund the tip
+        if (intent.tip.isNative && address(this).balance < intent.tip.amount) {
+            revert InsufficientBalance();
+        }
+        transferFromContract(msg.sender, intent.tip);
 
         delete escrow[msg.sender][intentId];
 
@@ -422,6 +448,7 @@ contract BeepContract {
     }
 
     function isSupportedToken(address token) internal view returns (bool) {
+        if (token == address(0)) return true; // Support native token
         for (uint256 i = 0; i < config.supportedTokens.length; i++) {
             if (config.supportedTokens[i] == token) {
                 return true;
@@ -466,6 +493,7 @@ contract BeepContract {
 
     function transferFromContract(address to, BeepCoin memory coin) internal {
         if (coin.isNative) {
+            if (address(this).balance < coin.amount) revert InsufficientBalance();
             payable(to).transfer(coin.amount);
         } else {
             bool success = IERC20(coin.token).transfer(to, coin.amount);

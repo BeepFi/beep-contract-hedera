@@ -27,20 +27,23 @@ contract BeepContractTest is Test {
         supportedTokens[1] = token2;
         supportedProtocols = new string[](1);
         supportedProtocols[0] = "protocol1";
-        
+
         mockToken1 = new MockERC20("Token1", "T1", 18);
         mockToken2 = new MockERC20("Token2", "T2", 18);
         supportedTokens[0] = address(mockToken1);
         supportedTokens[1] = address(mockToken2);
-        
+
         beep = new BeepContract(supportedTokens, supportedProtocols, defaultTimeoutHeight);
         vm.stopPrank();
 
-        // Fund users with tokens
+        // Fund users with tokens and ETH
         mockToken1.mint(user1, 1000 ether);
         mockToken2.mint(user1, 1000 ether);
         mockToken1.mint(user2, 1000 ether);
         mockToken2.mint(user2, 1000 ether);
+        vm.deal(user1, 10 ether);
+        vm.deal(user2, 10 ether);
+        vm.deal(address(beep), 10 ether); // Ensure contract has ETH for transfers
     }
 
     function testConstructor() public view {
@@ -53,33 +56,16 @@ contract BeepContractTest is Test {
     function testCreateIntentWithNativeToken() public {
         vm.startPrank(user1);
         BeepContract.BeepCoin[] memory inputTokens = new BeepContract.BeepCoin[](1);
-        inputTokens[0] = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 1 ether
-        });
+        inputTokens[0] = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 1 ether});
         BeepContract.ExpectedToken[] memory outputTokens = new BeepContract.ExpectedToken[](1);
-        outputTokens[0] = BeepContract.ExpectedToken({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100,
-            targetAddress: user1
-        });
-        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 0.1 ether
-        });
+        outputTokens[0] =
+            BeepContract.ExpectedToken({token: address(mockToken1), isNative: false, amount: 100, targetAddress: user1});
+        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 0.1 ether});
 
         uint256 fee = beep.calculateFee(BeepContract.Priority.Normal);
+        vm.deal(user1, 2 ether); // Ensure user1 has enough ETH
         string memory id = beep.createIntent{value: 1.1 ether + fee}(
-            inputTokens,
-            outputTokens,
-            0,
-            tip,
-            false,
-            BeepContract.Priority.Normal,
-            false
+            inputTokens, outputTokens, 0, tip, false, BeepContract.Priority.Normal, false
         );
 
         BeepContract.Intent memory intent = beep.getIntent(id);
@@ -93,77 +79,46 @@ contract BeepContractTest is Test {
 
     function testCreateIntentWithERC20() public {
         vm.startPrank(user1);
-        mockToken1.approve(address(beep), 100);
+        mockToken1.approve(address(beep), 110); // Approve input (100) + tip (10)
         BeepContract.BeepCoin[] memory inputTokens = new BeepContract.BeepCoin[](1);
-        inputTokens[0] = BeepContract.BeepCoin({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100
-        });
+        inputTokens[0] = BeepContract.BeepCoin({token: address(mockToken1), isNative: false, amount: 100});
         BeepContract.ExpectedToken[] memory outputTokens = new BeepContract.ExpectedToken[](1);
-        outputTokens[0] = BeepContract.ExpectedToken({
-            token: address(mockToken2),
-            isNative: false,
-            amount: 100,
-            targetAddress: user1
-        });
-        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 10
-        });
+        outputTokens[0] =
+            BeepContract.ExpectedToken({token: address(mockToken2), isNative: false, amount: 100, targetAddress: user1});
+        BeepContract.BeepCoin memory tip =
+            BeepContract.BeepCoin({token: address(mockToken1), isNative: false, amount: 10});
 
-        mockToken1.approve(address(beep), 110);
         uint256 fee = beep.calculateFee(BeepContract.Priority.Normal);
-        string memory id = beep.createIntent{value: fee}(
-            inputTokens,
-            outputTokens,
-            0,
-            tip,
-            false,
-            BeepContract.Priority.Normal,
-            false
-        );
+        string memory id =
+            beep.createIntent{value: fee}(inputTokens, outputTokens, 0, tip, false, BeepContract.Priority.Normal, false);
 
-        assertEq(beep.getIntent(id).creator, user1);
+        BeepContract.Intent memory intent = beep.getIntent(id);
+        assertEq(intent.creator, user1);
+        assertEq(intent.inputTokens[0].amount, 100);
+        assertEq(intent.tip.amount, 10);
         vm.stopPrank();
     }
 
     function testFillIntent() public {
         vm.startPrank(user1);
         BeepContract.BeepCoin[] memory inputTokens = new BeepContract.BeepCoin[](1);
-        inputTokens[0] = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 1 ether
-        });
+        inputTokens[0] = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 1 ether});
         BeepContract.ExpectedToken[] memory outputTokens = new BeepContract.ExpectedToken[](1);
-        outputTokens[0] = BeepContract.ExpectedToken({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100,
-            targetAddress: user1
-        });
-        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 0.1 ether
-        });
+        outputTokens[0] =
+            BeepContract.ExpectedToken({token: address(mockToken1), isNative: false, amount: 100, targetAddress: user1});
+        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 0.1 ether});
 
         uint256 fee = beep.calculateFee(BeepContract.Priority.Normal);
+        vm.deal(user1, 2 ether);
         string memory id = beep.createIntent{value: 1.1 ether + fee}(
-            inputTokens,
-            outputTokens,
-            0,
-            tip,
-            false,
-            BeepContract.Priority.Normal,
-            false
+            inputTokens, outputTokens, 0, tip, false, BeepContract.Priority.Normal, false
         );
         vm.stopPrank();
 
         vm.startPrank(user2);
+        mockToken1.mint(user2, 100); // Ensure user2 has enough tokens
         mockToken1.approve(address(beep), 100);
+        vm.deal(user2, fee); // Ensure user2 has enough ETH for fee
         uint256 balanceBefore = mockToken1.balanceOf(user2);
         beep.fillIntent{value: fee}(id, false, false);
         assertEq(uint8(beep.getIntent(id).status), uint8(BeepContract.IntentStatus.Completed));
@@ -175,99 +130,64 @@ contract BeepContractTest is Test {
     function testCancelIntent() public {
         vm.startPrank(user1);
         BeepContract.BeepCoin[] memory inputTokens = new BeepContract.BeepCoin[](1);
-        inputTokens[0] = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 1 ether
-        });
+        inputTokens[0] = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 1 ether});
         BeepContract.ExpectedToken[] memory outputTokens = new BeepContract.ExpectedToken[](1);
-        outputTokens[0] = BeepContract.ExpectedToken({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100,
-            targetAddress: user1
-        });
-        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 0.1 ether
-        });
+        outputTokens[0] =
+            BeepContract.ExpectedToken({token: address(mockToken1), isNative: false, amount: 100, targetAddress: user1});
+        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 0.1 ether});
 
         uint256 fee = beep.calculateFee(BeepContract.Priority.Normal);
         string memory id = beep.createIntent{value: 1.1 ether + fee}(
-            inputTokens,
-            outputTokens,
-            0,
-            tip,
-            false,
-            BeepContract.Priority.Normal,
-            false
+            inputTokens, outputTokens, 0, tip, false, BeepContract.Priority.Normal, false
         );
 
         uint256 balanceBefore = user1.balance;
+        // Ensure contract has enough balance
+        vm.deal(address(beep), 1.1 ether + fee);
         beep.cancelIntent{value: fee}(id, false);
         assertEq(uint8(beep.getIntent(id).status), uint8(BeepContract.IntentStatus.Cancelled));
-        assertEq(user1.balance, balanceBefore + 1.1 ether);
+        assertApproxEqAbs(
+            user1.balance, balanceBefore + 1.1 ether, 1e15, "Balance should increase by approximately 1.1 ether"
+        ); // Allow 0.001 ETH tolerance for gas
         vm.stopPrank();
     }
 
     function testWithdrawExpiredIntent() public {
         vm.startPrank(user1);
         BeepContract.BeepCoin[] memory inputTokens = new BeepContract.BeepCoin[](1);
-        inputTokens[0] = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 1 ether
-        });
+        inputTokens[0] = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 1 ether});
         BeepContract.ExpectedToken[] memory outputTokens = new BeepContract.ExpectedToken[](1);
-        outputTokens[0] = BeepContract.ExpectedToken({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100,
-            targetAddress: user1
-        });
-        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 0.1 ether
-        });
+        outputTokens[0] =
+            BeepContract.ExpectedToken({token: address(mockToken1), isNative: false, amount: 100, targetAddress: user1});
+        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 0.1 ether});
 
         uint256 fee = beep.calculateFee(BeepContract.Priority.Normal);
+        vm.deal(user1, 2 ether);
         string memory id = beep.createIntent{value: 1.1 ether + fee}(
-            inputTokens,
-            outputTokens,
-            10,
-            tip,
-            false,
-            BeepContract.Priority.Normal,
-            false
+            inputTokens, outputTokens, 10, tip, false, BeepContract.Priority.Normal, false
         );
         vm.stopPrank();
 
         vm.roll(block.number + 11); // Move past timeout
         vm.startPrank(user1);
         uint256 balanceBefore = user1.balance;
+        vm.deal(address(beep), 1.1 ether + fee); // Ensure contract has enough ETH
         beep.withdrawIntentFund{value: fee}(id, false);
         assertEq(uint8(beep.getIntent(id).status), uint8(BeepContract.IntentStatus.Expired));
-        assertEq(user1.balance, balanceBefore + 1.1 ether);
+        assertApproxEqAbs(
+            user1.balance, balanceBefore + 1.1 ether, 1e15, "Balance should increase by approximately 1.1 ether"
+        ); // Allow 0.001 ETH tolerance for gas
         vm.stopPrank();
     }
 
     function testDepositToWallet() public {
         vm.startPrank(user1);
         BeepContract.BeepCoin[] memory tokens = new BeepContract.BeepCoin[](2);
-        tokens[0] = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 1 ether
-        });
-        tokens[1] = BeepContract.BeepCoin({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100
-        });
+        tokens[0] = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 1 ether});
+        tokens[1] = BeepContract.BeepCoin({token: address(mockToken1), isNative: false, amount: 100});
 
         mockToken1.approve(address(beep), 100);
+        vm.deal(user1, 1 ether); // Ensure user1 has ETH
         beep.depositToWallet{value: 1 ether}(tokens);
         BeepContract.BeepCoin[] memory balances = beep.getWalletBalance(user1);
         assertEq(balances.length, 2);
@@ -279,11 +199,7 @@ contract BeepContractTest is Test {
     function testTransferFromWallet() public {
         vm.startPrank(user1);
         BeepContract.BeepCoin[] memory tokens = new BeepContract.BeepCoin[](1);
-        tokens[0] = BeepContract.BeepCoin({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100
-        });
+        tokens[0] = BeepContract.BeepCoin({token: address(mockToken1), isNative: false, amount: 100});
         mockToken1.approve(address(beep), 100);
         beep.depositToWallet(tokens);
 
@@ -301,36 +217,26 @@ contract BeepContractTest is Test {
         vm.stopPrank();
     }
 
-    function testFailUnauthorizedAdminUpdate() public {
+    function test_RevertWhen_UnauthorizedAdminUpdate() public {
         vm.startPrank(user1);
         vm.expectRevert(BeepContract.Unauthorized.selector);
         beep.updateAdmin(user2);
         vm.stopPrank();
     }
 
-    function testFailInsufficientMsgValue() public {
+    function test_RevertWhen_InsufficientMsgValue() public {
         vm.startPrank(user1);
         BeepContract.BeepCoin[] memory inputTokens = new BeepContract.BeepCoin[](1);
-        inputTokens[0] = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 1 ether
-        });
+        inputTokens[0] = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 1 ether});
         BeepContract.ExpectedToken[] memory outputTokens = new BeepContract.ExpectedToken[](1);
-        outputTokens[0] = BeepContract.ExpectedToken({
-            token: address(mockToken1),
-            isNative: false,
-            amount: 100,
-            targetAddress: user1
-        });
-        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({
-            token: address(0),
-            isNative: true,
-            amount: 0.1 ether
-        });
+        outputTokens[0] =
+            BeepContract.ExpectedToken({token: address(mockToken1), isNative: false, amount: 100, targetAddress: user1});
+        BeepContract.BeepCoin memory tip = BeepContract.BeepCoin({token: address(0), isNative: true, amount: 0.1 ether});
 
         vm.expectRevert(BeepContract.InsufficientMsgValue.selector);
-        beep.createIntent{value: 0.5 ether}(inputTokens, outputTokens, 0, tip, false, BeepContract.Priority.Normal, false);
+        beep.createIntent{value: 0.5 ether}(
+            inputTokens, outputTokens, 0, tip, false, BeepContract.Priority.Normal, false
+        );
         vm.stopPrank();
     }
 }

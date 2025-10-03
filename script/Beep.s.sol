@@ -16,7 +16,7 @@ contract BeepScript is Script {
         string[] memory supportedProtocols = new string[](1);
         supportedProtocols[0] = "protocol1";
         uint64 defaultTimeoutHeight = 100;
-        
+
         BeepContract beep = new BeepContract(supportedTokens, supportedProtocols, defaultTimeoutHeight);
         console.log("BeepContract deployed to:", address(beep));
 
