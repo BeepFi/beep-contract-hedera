@@ -40,7 +40,7 @@ contract TrustedIssuersRegistry is ITrustedIssuersRegistry, AccessControl {
 
     // ==================== EVENTS ====================
 
-    event TrustedIssuerAdded(address indexed trustedIssuer, uint256[] claimTopics);
+    event TrustedIssuerAdded(address indexed trustedIssuer, address indexed identity, uint256[] claimTopics);
     event TrustedIssuerRemoved(address indexed trustedIssuer);
     event ClaimTopicsUpdated(address indexed trustedIssuer, uint256[] claimTopics);
 
@@ -58,28 +58,26 @@ contract TrustedIssuersRegistry is ITrustedIssuersRegistry, AccessControl {
      * @param _trustedIssuer Address of the issuer
      * @param _claimTopics Array of claim topics the issuer can certify
      */
-    function addTrustedIssuer(address _trustedIssuer, uint256[] calldata _claimTopics)
+    function addTrustedIssuer(address _trustedIssuer, address _issuerIdentity, uint256[] calldata _claimTopics)
         external
         override
         onlyRole(MANAGER_ROLE)
     {
         require(_trustedIssuer != address(0), "Invalid issuer address");
+        require(_issuerIdentity != address(0), "Invalid identity address");
         require(!issuerData[_trustedIssuer].exists, "Issuer already exists");
         require(_claimTopics.length > 0, "Must specify at least one claim topic");
 
-        // Create issuer data
         IssuerData storage data = issuerData[_trustedIssuer];
-        data.identity = IIdentity(_trustedIssuer); // Assuming issuer address is ONCHAINID
+        data.identity = IIdentity(_issuerIdentity);
         data.claimTopics = _claimTopics;
         data.exists = true;
         data.index = trustedIssuers.length;
 
         trustedIssuers.push(_trustedIssuer);
 
-        // Add to topic mappings
         for (uint256 i = 0; i < _claimTopics.length; i++) {
             uint256 topic = _claimTopics[i];
-
             if (!issuerHasTopic[topic][_trustedIssuer]) {
                 issuerTopicIndex[topic][_trustedIssuer] = issuersByTopic[topic].length;
                 issuersByTopic[topic].push(_trustedIssuer);
@@ -87,7 +85,7 @@ contract TrustedIssuersRegistry is ITrustedIssuersRegistry, AccessControl {
             }
         }
 
-        emit TrustedIssuerAdded(_trustedIssuer, _claimTopics);
+        emit TrustedIssuerAdded(_trustedIssuer, _issuerIdentity, _claimTopics);
     }
 
     /**
@@ -189,19 +187,25 @@ contract TrustedIssuersRegistry is ITrustedIssuersRegistry, AccessControl {
     /**
      * @notice Batch add trusted issuers
      */
-    function batchAddTrustedIssuers(address[] calldata _trustedIssuers, uint256[][] calldata _claimTopicsArray)
-        external
-        onlyRole(MANAGER_ROLE)
-    {
-        require(_trustedIssuers.length == _claimTopicsArray.length, "Array length mismatch");
+    function batchAddTrustedIssuers(
+        address[] calldata _trustedIssuers,
+        address[] calldata _issuerIdentities,
+        uint256[][] calldata _claimTopicsArray
+    ) external onlyRole(MANAGER_ROLE) {
+        require(
+            _trustedIssuers.length == _issuerIdentities.length && _trustedIssuers.length == _claimTopicsArray.length,
+            "Array length mismatch"
+        );
 
         for (uint256 i = 0; i < _trustedIssuers.length; i++) {
             address issuer = _trustedIssuers[i];
+            address issuerIdentity = _issuerIdentities[i];
             uint256[] memory topics = _claimTopicsArray[i];
 
-            if (!issuerData[issuer].exists && issuer != address(0) && topics.length > 0) {
+            if (!issuerData[issuer].exists && issuer != address(0) && issuerIdentity != address(0) && topics.length > 0)
+            {
                 IssuerData storage data = issuerData[issuer];
-                data.identity = IIdentity(issuer);
+                data.identity = IIdentity(issuerIdentity);
                 data.claimTopics = topics;
                 data.exists = true;
                 data.index = trustedIssuers.length;
@@ -210,7 +214,6 @@ contract TrustedIssuersRegistry is ITrustedIssuersRegistry, AccessControl {
 
                 for (uint256 j = 0; j < topics.length; j++) {
                     uint256 topic = topics[j];
-
                     if (!issuerHasTopic[topic][issuer]) {
                         issuerTopicIndex[topic][issuer] = issuersByTopic[topic].length;
                         issuersByTopic[topic].push(issuer);
@@ -218,7 +221,7 @@ contract TrustedIssuersRegistry is ITrustedIssuersRegistry, AccessControl {
                     }
                 }
 
-                emit TrustedIssuerAdded(issuer, topics);
+                emit TrustedIssuerAdded(issuer, issuerIdentity, topics);
             }
         }
     }

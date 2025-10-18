@@ -10,14 +10,15 @@ contract MockTrustedIssuersRegistry is ITrustedIssuersRegistry {
     mapping(address => IIdentity) public issuerIdentities; // Maps issuers to their identities
     address[] public trustedIssuers; // List of trusted issuers
 
-    function addTrustedIssuer(address _issuer, uint256[] calldata _claimTopics) external override {
-        require(_issuer != address(0), "Invalid issuer address");
-        require(!isTrustedIssuer(_issuer), "Issuer already exists");
-        
-        trustedIssuers.push(_issuer);
+    function addTrustedIssuer(address _trustedIssuer, address _issuerIdentity, uint256[] calldata _claimTopics) external override {
+        require(_trustedIssuer != address(0), "Invalid issuer address");
+        require(!isTrustedIssuer(_trustedIssuer), "Issuer already exists");
+
+        trustedIssuers.push(_trustedIssuer);
+        issuerIdentities[_trustedIssuer] = IIdentity(_issuerIdentity);
         for (uint256 i = 0; i < _claimTopics.length; i++) {
-            issuers[_claimTopics[i]].push(_issuer);
-            issuerClaimTopics[_issuer].push(_claimTopics[i]);
+            issuers[_claimTopics[i]].push(_trustedIssuer);
+            issuerClaimTopics[_trustedIssuer].push(_claimTopics[i]);
         }
     }
 
