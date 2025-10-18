@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 import { IIdentity } from "./IIdentity.sol";
 
 interface ITrustedIssuersRegistry {
-    function addTrustedIssuer(address _trustedIssuer, uint256[] calldata _claimTopics) external;
+    function addTrustedIssuer(address _trustedIssuer, address _issuerIdentity, uint256[] calldata _claimTopics) external;
     function removeTrustedIssuer(address _trustedIssuer) external;
     function updateIssuerClaimTopics(address _trustedIssuer, uint256[] calldata _claimTopics) external;
     function getTrustedIssuers() external view returns (address[] memory);

@@ -4,9 +4,6 @@ pragma solidity ^0.8.20;
 import {IIdentity} from "../interfaces/IIdentity.sol";
 
 contract MockIdentity is IIdentity {
-    mapping(bytes32 => Claim) public claims;
-    mapping(uint256 => bytes32[]) public claimIdsByTopic;
-
     struct Claim {
         uint256 topic;
         uint256 scheme;
@@ -14,6 +11,18 @@ contract MockIdentity is IIdentity {
         bytes signature;
         bytes data;
         string uri;
+    }
+
+    mapping(bytes32 => Claim) public claims;
+    mapping(address => mapping(uint256 => bytes32[])) public claimIdsByUserAndTopic;
+    mapping(bytes32 => uint256) private keyPurposes;
+
+    function addKey(bytes32 _key, uint256 _purpose, uint256 /*_keyType*/) external {
+        keyPurposes[_key] = _purpose;
+    }
+
+    function keyHasPurpose(bytes32 _key, uint256 _purpose) external view override returns (bool) {
+        return keyPurposes[_key] == _purpose;
     }
 
     function addClaim(
@@ -24,21 +33,21 @@ contract MockIdentity is IIdentity {
         bytes calldata _data,
         string calldata _uri
     ) external override returns (bytes32) {
-        bytes32 claimId = keccak256(abi.encode(_topic, _issuer));
+        bytes32 claimId = keccak256(abi.encode(_issuer, _topic, msg.sender));
         claims[claimId] = Claim(_topic, _scheme, _issuer, _signature, _data, _uri);
-        claimIdsByTopic[_topic].push(claimId);
+        claimIdsByUserAndTopic[msg.sender][_topic].push(claimId);
         return claimId;
     }
 
-    function removeClaim(bytes32 _claimId) external override returns (bool) {
+    function removeClaim(address _user, bytes32 _claimId) external override returns (bool) {
         Claim memory claim = claims[_claimId];
         require(claim.issuer != address(0), "Claim does not exist");
-        
+
         // Remove claim from storage
         delete claims[_claimId];
-        
-        // Remove claimId from claimIdsByTopic
-        bytes32[] storage claimIds = claimIdsByTopic[claim.topic];
+
+        // Remove claimId from claimIdsByUserAndTopic
+        bytes32[] storage claimIds = claimIdsByUserAndTopic[_user][claim.topic];
         for (uint256 i = 0; i < claimIds.length; i++) {
             if (claimIds[i] == _claimId) {
                 claimIds[i] = claimIds[claimIds.length - 1];
@@ -49,8 +58,8 @@ contract MockIdentity is IIdentity {
         return true;
     }
 
-    function getClaimIdsByTopic(uint256 _topic) external view override returns (bytes32[] memory) {
-        return claimIdsByTopic[_topic];
+    function getClaimIdsByTopic(address _user, uint256 _topic) external view override returns (bytes32[] memory) {
+        return claimIdsByUserAndTopic[_user][_topic];
     }
 
     function getClaim(bytes32 _claimId)
@@ -61,9 +70,5 @@ contract MockIdentity is IIdentity {
     {
         Claim memory claim = claims[_claimId];
         return (claim.topic, claim.scheme, claim.issuer, claim.signature, claim.data, claim.uri);
-    }
-
-    function keyHasPurpose(bytes32, uint256) external pure override returns (bool) {
-        return true; // Simplified for testing
     }
 }

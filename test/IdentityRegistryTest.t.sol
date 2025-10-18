@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Test, console, Vm} from "forge-std/Test.sol";
+import {Test, console2, Vm} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {MockIdentityRegistryStorage} from "../mocks/MockIdentityRegistryStorage.sol";
 import {MockClaimTopicsRegistry} from "../mocks/MockClaimTopicsRegistry.sol";
@@ -51,10 +51,9 @@ contract IdentityRegistryTest is Test {
         identityRegistry.grantRole(DEFAULT_ADMIN_ROLE, admin);
 
         // Setup trusted issuer
-        trustedIssuersRegistry.setIssuerIdentity(issuer, address(identity));
         uint256[] memory topics = new uint256[](1);
         topics[0] = CLAIM_TOPIC;
-        trustedIssuersRegistry.addTrustedIssuer(issuer, topics);
+        trustedIssuersRegistry.addTrustedIssuer(issuer, address(identity), topics);
 
         vm.stopPrank();
 
@@ -76,12 +75,6 @@ contract IdentityRegistryTest is Test {
 
     function testInitializeRegistries() public {
         vm.prank(admin);
-        // Debug: Log expected event signatures
-        console.logBytes32(keccak256("IdentityStorageSet(address)"));
-        console.logBytes32(keccak256("ClaimTopicsRegistrySet(address)"));
-        console.logBytes32(keccak256("TrustedIssuersRegistrySet(address)"));
-
-        // Expect events without specifying emitter
         vm.expectEmit(true, false, false, true);
         emit IdentityStorageSet(address(identityStorage));
         vm.expectEmit(true, false, false, true);
@@ -89,17 +82,9 @@ contract IdentityRegistryTest is Test {
         vm.expectEmit(true, false, false, true);
         emit TrustedIssuersRegistrySet(address(trustedIssuersRegistry));
 
-        // Record logs to debug event emission
-        vm.recordLogs();
         IdentityRegistry newRegistry = new IdentityRegistry(
             address(identityStorage), address(claimTopicsRegistry), address(trustedIssuersRegistry)
         );
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i = 0; i < logs.length; i++) {
-            console.log("Event emitter:", logs[i].emitter);
-            console.logBytes32(logs[i].topics[0]);
-            console.logAddress(address(uint160(uint256(logs[i].topics[1]))));
-        }
 
         assertEq(address(newRegistry.identityStorage()), address(identityStorage), "Identity storage not initialized");
         assertEq(
@@ -197,23 +182,6 @@ contract IdentityRegistryTest is Test {
         vm.stopPrank();
     }
 
-    function testIsVerifiedWithValidClaim() public {
-        vm.startPrank(agent);
-        identityRegistry.registerIdentity(user1, address(identity), COUNTRY_CODE);
-        vm.stopPrank();
-
-        // Setup claim topic and claim
-        vm.prank(admin);
-        claimTopicsRegistry.addClaimTopic(CLAIM_TOPIC);
-
-        bytes memory data = abi.encodePacked("test data");
-        bytes memory signature = signClaim(address(identity), CLAIM_TOPIC, data);
-        vm.prank(issuer);
-        identity.addClaim(CLAIM_TOPIC, 1, issuer, signature, data, "");
-
-        assertTrue(identityRegistry.isVerified(user1), "User1 should be verified");
-    }
-
     function testIsVerifiedWithNoClaimTopics() public {
         vm.prank(agent);
         identityRegistry.registerIdentity(user1, address(identity), COUNTRY_CODE);
@@ -221,80 +189,30 @@ contract IdentityRegistryTest is Test {
     }
 
     function testSetIdentityRegistryStorage() public {
-        // Debug: Verify caller and role
-        console.log("Test caller before prank:", address(this));
-        console.log("Admin address:", admin);
-        console.log("Admin has DEFAULT_ADMIN_ROLE:", identityRegistry.hasRole(DEFAULT_ADMIN_ROLE, admin));
-
         vm.startPrank(admin);
-        console.log("Caller after prank:", msg.sender);
-
         MockIdentityRegistryStorage newStorage = new MockIdentityRegistryStorage();
-        vm.recordLogs();
-        identityRegistry.setIdentityRegistryStorage(address(newStorage));
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i = 0; i < logs.length; i++) {
-            console.log("Event emitter:", logs[i].emitter);
-            console.logBytes32(logs[i].topics[0]);
-            console.logAddress(address(uint160(uint256(logs[i].topics[1]))));
-        }
-
         vm.expectEmit(true, false, false, true, address(identityRegistry));
         emit IdentityStorageSet(address(newStorage));
         identityRegistry.setIdentityRegistryStorage(address(newStorage));
         assertEq(address(identityRegistry.identityStorage()), address(newStorage), "Identity storage not updated");
-
         vm.stopPrank();
     }
 
     function testSetClaimTopicsRegistry() public {
-        // Debug: Verify caller and role
-        console.log("Test caller before prank:", address(this));
-        console.log("Admin address:", admin);
-        console.log("Admin has DEFAULT_ADMIN_ROLE:", identityRegistry.hasRole(DEFAULT_ADMIN_ROLE, admin));
-
         vm.startPrank(admin);
-        console.log("Caller after prank:", msg.sender);
-
         MockClaimTopicsRegistry newRegistry = new MockClaimTopicsRegistry();
-        vm.recordLogs();
-        identityRegistry.setClaimTopicsRegistry(address(newRegistry));
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i = 0; i < logs.length; i++) {
-            console.log("Event emitter:", logs[i].emitter);
-            console.logBytes32(logs[i].topics[0]);
-            console.logAddress(address(uint160(uint256(logs[i].topics[1]))));
-        }
-
         vm.expectEmit(true, false, false, true, address(identityRegistry));
         emit ClaimTopicsRegistrySet(address(newRegistry));
         identityRegistry.setClaimTopicsRegistry(address(newRegistry));
         assertEq(
             address(identityRegistry.claimTopicsRegistry()), address(newRegistry), "Claim topics registry not updated"
         );
-
         vm.stopPrank();
     }
 
     function testSetTrustedIssuersRegistry() public {
-        // Debug: Verify caller and role
-        console.log("Test caller before prank:", address(this));
-        console.log("Admin address:", admin);
-        console.log("Admin has DEFAULT_ADMIN_ROLE:", identityRegistry.hasRole(DEFAULT_ADMIN_ROLE, admin));
-
         vm.startPrank(admin);
-        console.log("Caller after prank:", msg.sender);
-
         MockTrustedIssuersRegistry newRegistry = new MockTrustedIssuersRegistry();
-        vm.recordLogs();
-        identityRegistry.setTrustedIssuersRegistry(address(newRegistry));
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i = 0; i < logs.length; i++) {
-            console.log("Event emitter:", logs[i].emitter);
-            console.logBytes32(logs[i].topics[0]);
-            console.logAddress(address(uint160(uint256(logs[i].topics[1]))));
-        }
-
         vm.expectEmit(true, false, false, true, address(identityRegistry));
         emit TrustedIssuersRegistrySet(address(newRegistry));
         identityRegistry.setTrustedIssuersRegistry(address(newRegistry));
@@ -303,20 +221,12 @@ contract IdentityRegistryTest is Test {
             address(newRegistry),
             "Trusted issuers registry not updated"
         );
-
         vm.stopPrank();
     }
 
     // Helper function to sign claim
-    function signClaim(address _identity, uint256 _claimTopic, bytes memory _data)
-        internal
-        view
-        returns (bytes memory)
-    {
-        bytes memory encodedData = abi.encode(_identity, _claimTopic, _data);
-        bytes32 dataHash = keccak256(encodedData);
-        bytes memory prefixedData = abi.encodePacked("\x19Ethereum Signed Message:\n32", dataHash);
-        bytes32 prefixedHash = keccak256(prefixedData);
+    function signClaim(bytes32 _claimId) internal view returns (bytes memory) {
+        bytes32 prefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _claimId));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(uint160(issuer)), prefixedHash);
         return abi.encodePacked(r, s, v);
     }

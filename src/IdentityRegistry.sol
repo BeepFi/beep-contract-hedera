@@ -141,29 +141,17 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl {
      * @notice Check if a user's identity is verified
      * @dev Verification requires valid claims from trusted issuers
      */
-    function isVerified(address _userAddress) external view override returns (bool) {
+    function isVerified(address _userAddress) external view returns (bool) {
         if (!identityStorage.contains(_userAddress)) {
             return false;
         }
-
-        address identityAddress = identityStorage.storedIdentity(_userAddress);
-        if (identityAddress == address(0)) {
-            return false;
-        }
-
-        // Get required claim topics
-        uint256[] memory claimTopics = claimTopicsRegistry.getClaimTopics();
-        if (claimTopics.length == 0) {
-            return true; // No claims required
-        }
-
-        // Check each required claim topic
-        for (uint256 i = 0; i < claimTopics.length; i++) {
-            if (!_hasValidClaim(IIdentity(identityAddress), claimTopics[i])) {
+        IIdentity userIdentity = IIdentity(identityStorage.storedIdentity(_userAddress));
+        uint256[] memory topics = claimTopicsRegistry.getClaimTopics();
+        for (uint256 i = 0; i < topics.length; i++) {
+            if (!_hasValidClaim(userIdentity, _userAddress, topics[i])) {
                 return false;
             }
         }
-
         return true;
     }
 
@@ -171,30 +159,45 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl {
      * @notice Check if identity has a valid claim for a topic
      * @dev Internal function to verify claims with trusted issuers
      */
-    function _hasValidClaim(IIdentity _identity, uint256 _claimTopic) internal view returns (bool) {
-        // Get trusted issuers for this claim topic
-        address[] memory issuers = trustedIssuersRegistry.getTrustedIssuersForClaimTopic(_claimTopic);
-
-        if (issuers.length == 0) {
+    function _hasValidClaim(IIdentity _identity, address _user, uint256 _topic) internal view returns (bool) {
+        bytes32[] memory claimIds = _identity.getClaimIdsByTopic(_user, _topic);
+        if (claimIds.length == 0) {
             return false;
         }
-
-        // Check if identity has claim from any trusted issuer
-        for (uint256 i = 0; i < issuers.length; i++) {
-            bytes32[] memory claimIds = _identity.getClaimIdsByTopic(_claimTopic);
-
-            for (uint256 j = 0; j < claimIds.length; j++) {
-                (uint256 topic,, address issuer, bytes memory sig, bytes memory data,) = _identity.getClaim(claimIds[j]);
-
-                // Verify claim is from trusted issuer and signature is valid
-                if (issuer == issuers[i] && topic == _claimTopic) {
-                    if (_verifyClaimSignature(_identity, _claimTopic, issuer, sig, data)) {
-                        return true;
-                    }
-                }
+        address[] memory trustedIssuers = trustedIssuersRegistry.getTrustedIssuersForClaimTopic(_topic);
+        for (uint256 i = 0; i < claimIds.length; i++) {
+            (
+                uint256 topic,
+                uint256 scheme,
+                address issuer,
+                bytes memory signature,
+                bytes memory data,
+                /*string memory uri*/
+            ) = _identity.getClaim(claimIds[i]);
+            if (
+                topic == _topic &&
+                scheme == 1 &&
+                _isTrustedIssuer(issuer, trustedIssuers) &&
+                _verifyClaimSignature(_identity, _topic, issuer, signature, data)
+            ) {
+                return true;
             }
         }
+        return false;
+    }
 
+    /**
+     * @notice Check if an issuer is in the trusted issuers list
+     * @param issuer Address of the issuer to check
+     * @param trustedIssuers Array of trusted issuer addresses
+     * @return bool True if issuer is trusted
+     */
+    function _isTrustedIssuer(address issuer, address[] memory trustedIssuers) internal pure returns (bool) {
+        for (uint256 i = 0; i < trustedIssuers.length; i++) {
+            if (issuer == trustedIssuers[i]) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -204,13 +207,13 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl {
      */
     function _verifyClaimSignature(
         IIdentity _identity,
-        uint256 _claimTopic,
+        uint256 _topic,
         address _issuer,
         bytes memory _signature,
         bytes memory _data
     ) internal view returns (bool) {
         // Encode data for first keccak256
-        bytes memory encodedData = abi.encode(address(_identity), _claimTopic, _data);
+        bytes memory encodedData = abi.encode(address(_identity), _topic, _data);
         bytes32 dataHash;
 
         // Use inline assembly for keccak256
@@ -234,7 +237,7 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl {
         address recoveredSigner = _recoverSigner(prefixedHash, _signature);
 
         // Check if recovered signer has CLAIM_SIGNER_KEY on issuer identity
-        IIdentity issuerIdentity = trustedIssuersRegistry.getTrustedIssuerIdentity(_issuer);
+        IIdentity issuerIdentity = IIdentity(trustedIssuersRegistry.getTrustedIssuerIdentity(_issuer));
         return issuerIdentity.keyHasPurpose(keccak256(abi.encode(recoveredSigner)), 3); // 3 = CLAIM_SIGNER_KEY
     }
 
