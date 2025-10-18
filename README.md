@@ -5,29 +5,29 @@
 This a solidity smart contract designed for Hedera intent-based transactions, enabling users to create, fill, and cancel intents for token swaps on Hedera. It supports multi-signature governance, and robust security features like circuit breakers and rate limiting. The contract facilitates secure token transfers, wallet management, and recovery mechanisms while maintaining a flexible configuration for supported tokens and protocols.
 
 A Compliant, Hedera-Powered Stablecoin with Intent-Based swaps for Financial Inclusion in Africa.
-`bNGN` is a 1:1 Nigerian Naira-backed stablecoin built on Hedera using the ERC3643 standard for compliant security tokens, integrated with an innovative intent-based trading system (`BeepContract`). It tackles financial exclusion in Africa by enabling regulated, low-cost digital transactions for remittances, payments, and savings. The system ensures KYC/AML compliance, transfer limits, and proof-of-reserves (PoR) while leveraging Hedera's high-throughput, low-cost network. The BeepContract adds intent-based token swaps, allowing users to specify desired trades (e.g., `bNGN` for `USDC`) with flexible execution by third parties, enhancing liquidity and accessibility.
+`bNGN` is a 1:1 Nigerian Naira-backed stablecoin built on Hedera using the ERC3643 standard for compliant security tokens, integrated with an innovative intent-based trading system (`BeepContract`). It tackles financial exclusion in Africa by enabling regulated, low-cost digital transactions for remittances, payments, and savings. The system ensures KYC/AML compliance, transfer limits, and proof-of-reserves (PoR) while leveraging Hedera's high-throughput, low-cost network. The BeepContract adds intent-based token swaps, allowing users to specify desired trades (e.g., `bNGN` for `HBAR`) with flexible execution by third parties, enhancing liquidity and accessibility.
 
 ## Technical Use of Hedera
 
-**Hedera Token Service (HTS)**: bNGN token creation, minting, burning, and transfers, leveraging 10,000 TPS and < $0.001 fees.
-**Hedera Smart Contract Service**: Deploys ERC3643 and BeepContract on Hedera EVM for compliance and trading logic.
-**Hedera Consensus Service (HCS)**: Timestamps PoR URIs (IPFS) for immutability.
-**Mirror Node**: Real-time queries for balances, intents, and transactions.
+- **Hedera Token Service (HTS)**: bNGN token creation, minting, burning, and transfers, leveraging 10,000 TPS and < $0.001 fees.
+- **Hedera Smart Contract Service**: Deploys ERC3643 and BeepContract on Hedera EVM for compliance and trading logic.
+- **Hedera Consensus Service (HCS)**: Timestamps PoR URIs (IPFS) for immutability.
+- **Mirror Node**: Real-time queries for balances, intents, and transactions.
 
-**Why Hedera**: Fixed low fees, 3-5s finality, and carbon-neutral operation suit Africa's high-volume, cost-sensitive markets.
+_**Why Hedera**_: Fixed low fees, 3-5s finality, and carbon-neutral operation suit Africa's high-volume, cost-sensitive markets.
 
 ## Impact
 
-**Nigeria/Africa Relevance**: Reduces $26B remittance costs (6.5% avg.) by 90%, empowers 40M unbanked Nigerians with compliant wallets, and mitigates NGN volatility.
-**Scalability**: Supports 1M+ users via batch minting and intent-based DeFi.
-**Adoption**: Regulatory compliance enables bank partnerships for fiat ramps.
-**Sustainability**: Aligns with Africa's green finance goals via Hedera's ESG focus.
+- **Nigeria/Africa Relevance**: Reduces $26B remittance costs (6.5% avg.) by 90%, empowers 40M unbanked Nigerians with compliant wallets, and mitigates NGN volatility.
+- **Scalability**: Supports 1M+ users via batch minting and intent-based DeFi.
+- **Adoption**: Regulatory compliance enables bank partnerships for fiat ramps.
+- **Sustainability**: Aligns with Africa's green finance goals via Hedera's ESG focus.
 
 ## Completeness
 
-**MVP Features**: Token issuance, compliant transfers, ProofOfReserve, KYC/AML, intent-based swaps.
-**Tested**: Foundry suite, deployed on Hedera testnet.
-**Future**: cross-chain intents.
+- **MVP Features**: Token issuance, compliant transfers, ProofOfReserve, KYC/AML, intent-based swaps.
+- **Tested**: Foundry suite, deployed on Hedera testnet.
+- **Future**: cross-chain intents.
 
 ## Presentation
 Our 3-min demo video covers the problem (costly remittances, exclusion), solution (bNGN + intents), live demo (mint/transfer/swap), and impact (cost savings, inclusion). See below for details.
@@ -36,35 +36,9 @@ Our 3-min demo video covers the problem (costly remittances, exclusion), solutio
 In Africa, 57% of the population (400M+) is unbanked, and Nigeria's $20B+ remittances face 6.5% fees (World Bank 2023). Volatility in NGN and regulatory restrictions limit digital finance adoption. Existing stablecoins lack compliance for African regulators, risking bans, and cross-token trading is costly and complex. bNGN addresses this with a compliant, Hedera-powered stablecoin and intent-based trading for efficient, low-cost financial access.
 
 ## Solution: Beep intent-based wallet and decentralized fiat backed stable coin
-**High-Level Architecture**
-┌─────────────────────────────────────────────────────────────┐
-│                       ERC3643 Token                         │
-│  (bNGN - Tokenized Naira with Compliance & Identity)        │
-└──────────────┬──────────────────────────────┬───────────────┘
-               │                              │
-               ▼                              ▼
-    ┌──────────────────┐           ┌─────────────────────┐
-    │ IdentityRegistry │           │    Compliance       │
-    │   (KYC/AML)      │           │  (Transfer Rules)   │
-    └────────┬─────────┘           └────────┬────────────┘
-             │                             │
-             ├─────────────┬──────────────┬┴──────────────┐
-             ▼             ▼              ▼               ▼
-    ┌─────────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────┐
-    │  Identity   │ │  Claim   │ │   Trusted    │ │Identity  │
-    │ (ONCHAINID) │ │  Topics  │ │   Issuers    │ │ Storage  │
-    └─────────────┘ └──────────┘ └──────────────┘ └──────────┘
-┌─────────────────────────────────────────────────────────────┐
-│                     BeepContract                            │
-│  (Intent-Based Trading for bNGN and Other Tokens)           │
-└──────────────┬──────────────────────────────────────────────┘
-               │
-               ▼
-    ┌─────────────────────┐
-    │   Token Swaps       │
-    │   (bNGN ↔ Tokens)   │
-    └─────────────────────┘
 
+**High-Level Architecture**
+![graphics/contract-high-level-architecture](<graphics/contract-high-level-architecture.png>)
 
 - **HTS**: bNGN token operations (mint, burn, transfer).
 - **Smart Contracts**: ERC3643 for compliance, BeepContract for intents.
