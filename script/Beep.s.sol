@@ -11,11 +11,10 @@ contract BeepScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         address[] memory supportedTokens = new address[](2);
-        supportedTokens[0] = address(0x4); // Mock token1
-        supportedTokens[1] = address(0x5); // Mock token2
-        string[] memory supportedProtocols = new string[](1);
-        supportedProtocols[0] = "protocol1";
-        uint64 defaultTimeoutHeight = 100;
+        supportedTokens[0] = address(0x0); // Native HBAR
+        supportedTokens[1] = address(0x7AEb2F07D1C5ca792D1D2966215E03C9F90e99E8); // bNGN token address on Hedera
+        string[] memory supportedProtocols = new string[](0);
+        uint64 defaultTimeoutHeight = 300;
 
         BeepContract beep = new BeepContract(supportedTokens, supportedProtocols, defaultTimeoutHeight);
         console.log("BeepContract deployed to:", address(beep));

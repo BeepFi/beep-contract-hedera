@@ -35,8 +35,52 @@ contract ERC3643Script is Script {
         uint256 userPrivateKey = vm.envUint("USER_PRIVATE_KEY");
         address userAddress = vm.addr(userPrivateKey);
 
+        console.log("=== ADDRESS VERIFICATION ===");
+        console.log("Admin address:", admin);
+        console.log("Agent address:", agent);
+        console.log("Pauser address:", pauser);
+        console.log("User address:", userAddress);
+        console.log("Admin balance:", admin.balance / 1e18, "HBAR");
+        console.log("Agent balance:", agent.balance / 1e18, "HBAR");
+        
+        require(admin != agent, "Admin and agent must be different addresses");
+        require(admin != pauser, "Admin and pauser must be different addresses");
+
         vm.startBroadcast(deployerPrivateKey);
 
+        // Fund agent account if needed (send 0.1 HBAR for gas)
+        if (agent.balance <= 0.1 ether) {
+            console.log("Funding agent account with 0.1 HBAR...");
+            payable(agent).transfer(0.1 ether);
+            console.log("Agent new balance:", agent.balance / 1e18, "HBAR");
+            vm.pauseGasMetering();
+            vm.sleep(2000);
+            vm.resumeGasMetering();
+        }
+
+        // Fund pauser account if needed (send 0.1 HBAR for gas)
+        if (pauser.balance < 0.1 ether) {
+            console.log("Funding pauser account with 0.1 HBAR...");
+            payable(pauser).transfer(0.1 ether);
+            console.log("Pauser new balance:", pauser.balance / 1e18, "HBAR");
+            vm.pauseGasMetering();
+            vm.sleep(2000);
+            vm.resumeGasMetering();
+        }
+
+        // Fund user account if needed (send 0.1 HBAR for gas)
+        if (userAddress.balance < 0.1 ether) {
+            console.log("Funding user account with 0.1 HBAR...");
+            payable(userAddress).transfer(0.1 ether);
+            console.log("User new balance:", userAddress.balance / 1e18, "HBAR");
+            vm.pauseGasMetering();
+            vm.sleep(2000);
+            vm.resumeGasMetering();
+        }
+
+        console.log("=== DEPLOYING CORE INFRASTRUCTURE ===");
+
+        // Deploy core infrastructure
         IdentityRegistryStorage identityStorage = new IdentityRegistryStorage();
         console.log("IdentityRegistryStorage deployed to:", address(identityStorage));
         vm.pauseGasMetering();
@@ -69,22 +113,20 @@ contract ERC3643Script is Script {
         vm.sleep(2000);
         vm.resumeGasMetering();
 
-        Identity identity = new Identity(admin);
-        console.log("Identity contract deployed to:", address(identity));
+        // Deploy separate identity contracts for agent and admin
+        Identity agentIdentity = new Identity(agent);
+        console.log("Agent Identity contract deployed to:", address(agentIdentity));
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
-        bytes32 agentKey = keccak256(abi.encode(agent));
-        if (!identity.keyHasPurpose(agentKey, 3)) {
-            identity.addKey(agentKey, 3, 1);
-            console.log("Added agent as CLAIM_SIGNER_KEY:", agent);
-        } else {
-            console.log("Agent already has CLAIM_SIGNER_KEY:", agent);
-        }
+        Identity adminIdentity = new Identity(admin);
+        console.log("Admin Identity contract deployed to:", address(adminIdentity));
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
+
+        console.log("=== DEPLOYING TOKEN ===");
 
         string memory name = "Tokenized Naira";
         string memory symbol = "bNGN";
@@ -95,6 +137,9 @@ contract ERC3643Script is Script {
         vm.sleep(2000);
         vm.resumeGasMetering();
 
+        console.log("=== GRANTING ROLES ===");
+
+        // Grant roles
         bNgn.grantRole(bNgn.DEFAULT_ADMIN_ROLE(), admin);
         console.log("Granted DEFAULT_ADMIN_ROLE to:", admin);
         vm.pauseGasMetering();
@@ -120,41 +165,44 @@ contract ERC3643Script is Script {
         vm.resumeGasMetering();
 
         identityStorage.grantRole(identityStorage.REGISTRY_ROLE(), address(identityRegistry));
-        console.log("Granted REGISTRY_ROLE to IdentityRegistry:", address(identityRegistry));
+        console.log("Granted REGISTRY_ROLE to IdentityRegistry");
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
         identityRegistry.grantRole(identityRegistry.AGENT_ROLE(), agent);
-        console.log("Granted AGENT_ROLE to:", agent, "for IdentityRegistry");
+        console.log("Granted AGENT_ROLE to agent for IdentityRegistry");
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
         claimTopicsRegistry.grantRole(claimTopicsRegistry.MANAGER_ROLE(), admin);
-        console.log("Granted MANAGER_ROLE to:", admin, "for ClaimTopicsRegistry");
+        console.log("Granted MANAGER_ROLE to admin for ClaimTopicsRegistry");
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
         trustedIssuersRegistry.grantRole(trustedIssuersRegistry.MANAGER_ROLE(), admin);
-        console.log("Granted MANAGER_ROLE to:", admin, "for TrustedIssuersRegistry");
+        console.log("Granted MANAGER_ROLE to admin for TrustedIssuersRegistry");
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
         compliance.grantRole(compliance.AGENT_ROLE(), agent);
-        console.log("Granted AGENT_ROLE to:", agent, "for Compliance");
+        console.log("Granted AGENT_ROLE to agent for Compliance");
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
+
+        console.log("=== CONFIGURING COMPLIANCE ===");
 
         compliance.bindToken(address(bNgn));
-        console.log("Compliance bound to ERC3643 token at:", address(bNgn));
+        console.log("Compliance bound to ERC3643 token");
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
+        // Add claim topics
         claimTopicsRegistry.addClaimTopic(1);
         console.log("Added claim topic: KYC (1)");
         vm.pauseGasMetering();
@@ -168,109 +216,135 @@ contract ERC3643Script is Script {
         vm.resumeGasMetering();
 
         compliance.setComplianceLimits(1_000_000 * 10 ** 18, 10_000_000 * 10 ** 18, 100_000_000 * 10 ** 18, 0);
-        console.log("Set compliance limits: daily=1M, monthly=10M, maxBalance=100M, minHoldingPeriod=0");
+        console.log("Set compliance limits: daily=1M, monthly=10M, maxBalance=100M");
+        vm.pauseGasMetering();
+        vm.sleep(2000);
+        vm.resumeGasMetering();
+
+        // Add agent as trusted issuer FIRST (before any identity registration)
+        uint256[] memory issuerTopics = new uint256[](2);
+        issuerTopics[0] = 1;
+        issuerTopics[1] = 2;
+        trustedIssuersRegistry.addTrustedIssuer(agent, address(agentIdentity), issuerTopics);
+        console.log("Added trusted issuer (agent) for topics KYC and AML");
+        vm.pauseGasMetering();
+        vm.sleep(2000);
+        vm.resumeGasMetering();
+
+        vm.stopBroadcast();
+
+        // ============================================================
+        // SWITCH TO AGENT TO ADD CLAIMS
+        // ============================================================
+        console.log("=== ADDING CLAIMS (AS AGENT) ===");
+        vm.startBroadcast(agentPrivateKey);
+
+        // KYC claim for admin
+        bytes memory kycData = "KYC verified";
+        bytes memory kycEncodedData = abi.encode(agent, uint256(1), admin, kycData);
+        bytes32 kycDataHash = keccak256(kycEncodedData);
+        bytes32 kycPrefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", kycDataHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(agentPrivateKey, kycPrefixedHash);
+        bytes memory kycSignature = abi.encodePacked(r, s, v);
+
+        adminIdentity.addClaim(admin, 1, 1, agent, kycSignature, kycData, "");
+        console.log("Added KYC claim to admin's identity");
+        vm.pauseGasMetering();
+        vm.sleep(2000);
+        vm.resumeGasMetering();
+
+        // AML claim for admin
+        bytes memory amlData = "AML verified";
+        bytes memory amlEncodedData = abi.encode(agent, uint256(2), admin, amlData);
+        bytes32 amlDataHash = keccak256(amlEncodedData);
+        bytes32 amlPrefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", amlDataHash));
+        (v, r, s) = vm.sign(agentPrivateKey, amlPrefixedHash);
+        bytes memory amlSignature = abi.encodePacked(r, s, v);
+
+        adminIdentity.addClaim(admin, 2, 1, agent, amlSignature, amlData, "");
+        console.log("Added AML claim to admin's identity");
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
         // Register agent's identity
         if (identityRegistry.identity(agent) == address(0)) {
-            identityRegistry.registerIdentity(agent, address(identity), 234);
-            console.log("Registered identity for agent:", agent, "with identity contract:", address(identity));
+            identityRegistry.registerIdentity(agent, address(agentIdentity), 234);
+            console.log("Registered agent identity");
         }
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
-        uint256[] memory issuerTopics = new uint256[](2);
-        issuerTopics[0] = 1;
-        issuerTopics[1] = 2;
-        trustedIssuersRegistry.addTrustedIssuer(agent, address(identity), issuerTopics);
-        console.log("Added trusted issuer (agent):", agent, "for topics KYC and AML");
-        vm.pauseGasMetering();
-        vm.sleep(2000);
-        vm.resumeGasMetering();
-
-        address[] memory trustedIssuersKyc = trustedIssuersRegistry.getTrustedIssuersForClaimTopic(1);
-        console.log("Trusted issuers for KYC (1):", trustedIssuersKyc.length > 0 ? trustedIssuersKyc[0] : address(0));
-        address[] memory trustedIssuersAml = trustedIssuersRegistry.getTrustedIssuersForClaimTopic(2);
-        console.log("Trusted issuers for AML (2):", trustedIssuersAml.length > 0 ? trustedIssuersAml[0] : address(0));
-        vm.pauseGasMetering();
-        vm.sleep(2000);
-        vm.resumeGasMetering();
-
-        if (identityRegistry.identity(userAddress) == address(0)) {
-            identityRegistry.registerIdentity(userAddress, address(identity), 234);
-            console.log("Registered identity for user:", userAddress, "with identity contract:", address(identity));
-        } else {
-            console.log("User already registered with identity:", identityRegistry.identity(userAddress));
-        }
-        vm.pauseGasMetering();
-        vm.sleep(2000);
-        vm.resumeGasMetering();
-
+        // Register admin's identity
         if (identityRegistry.identity(admin) == address(0)) {
-            identityRegistry.registerIdentity(admin, address(identity), 234);
-            console.log("Registered identity for admin:", admin, "with identity contract:", address(identity));
-        } else {
-            console.log("Admin already registered with identity:", identityRegistry.identity(admin));
+            identityRegistry.registerIdentity(admin, address(adminIdentity), 234);
+            console.log("Registered admin identity");
         }
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
 
-        // Add KYC/AML claims for admin (signed by agent, called by admin)
-        console.log("Adding KYC/AML claims for admin, signed by agent");
-        // KYC claim
-        bytes32 kycClaimId = keccak256(abi.encode(agent, uint256(1), admin));
-        bytes memory kycData = "KYC verified";
-        bytes memory kycEncodedData = abi.encode(address(identity), uint256(1), kycData);
-        bytes32 kycDataHash = keccak256(kycEncodedData);
-        bytes32 kycPrefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", kycDataHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(agentPrivateKey, kycPrefixedHash);
-        bytes memory kycSignature = abi.encodePacked(r, s, v);
-        identity.addClaim(1, 1, agent, kycSignature, kycData, "");
-        console.log("Added KYC claim for admin, claimId:", bytes32ToString(kycClaimId));
+        vm.stopBroadcast();
 
-        // AML claim
-        bytes32 amlClaimId = keccak256(abi.encode(agent, uint256(2), admin));
-        bytes memory amlData = "AML verified";
-        bytes memory amlEncodedData = abi.encode(address(identity), uint256(2), amlData);
-        bytes32 amlDataHash = keccak256(amlEncodedData);
-        bytes32 amlPrefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", amlDataHash));
-        (v, r, s) = vm.sign(agentPrivateKey, amlPrefixedHash);
-        bytes memory amlSignature = abi.encodePacked(r, s, v);
-        identity.addClaim(2, 1, agent, amlSignature, amlData, "");
-        console.log("Added AML claim for admin, claimId:", bytes32ToString(amlClaimId));
+        // ============================================================
+        // SWITCH BACK TO ADMIN FOR VERIFICATION AND MINTING
+        // ============================================================
+        console.log("=== VERIFICATION AND MINTING (AS ADMIN) ===");
+        vm.startBroadcast(deployerPrivateKey);
 
-        // Debug: Check claims
-        bytes32[] memory kycClaimIds = identity.getClaimIdsByTopic(admin, 1);
+        // Verify the registered identity is correct
+        address registeredAdminIdentity = identityRegistry.identity(admin);
+        console.log("Registered admin identity:", registeredAdminIdentity);
+        require(registeredAdminIdentity == address(adminIdentity), "Admin identity mismatch");
+
+        // Check claims
+        bytes32[] memory kycClaimIds = adminIdentity.getClaimIdsByTopic(admin, 1);
         console.log("KYC claim count for admin:", kycClaimIds.length);
-        if (kycClaimIds.length > 0) {
-            console.log("KYC claim ID:", bytes32ToString(kycClaimIds[0]));
-        }
-        bytes32[] memory amlClaimIds = identity.getClaimIdsByTopic(admin, 2);
-        console.log("AML claim count for admin:", amlClaimIds.length);
-        if (amlClaimIds.length > 0) {
-            console.log("AML claim ID:", bytes32ToString(amlClaimIds[0]));
-        }
+        require(kycClaimIds.length > 0, "No KYC claims found");
 
-        // Debug: Check verification status
+        bytes32[] memory amlClaimIds = adminIdentity.getClaimIdsByTopic(admin, 2);
+        console.log("AML claim count for admin:", amlClaimIds.length);
+        require(amlClaimIds.length > 0, "No AML claims found");
+
+        // Check verification status
         bool isAdminVerified = identityRegistry.isVerified(admin);
         console.log("Admin verification status:", isAdminVerified);
         require(isAdminVerified, "Admin not verified");
 
+        console.log("=== ADMIN VERIFIED SUCCESSFULLY ===");
+
+        // Register user's identity (share admin's identity for demo purposes)
+        if (identityRegistry.identity(userAddress) == address(0)) {
+            identityRegistry.registerIdentity(userAddress, address(adminIdentity), 234);
+            console.log("Registered user identity");
+        }
+        vm.pauseGasMetering();
+        vm.sleep(2000);
+        vm.resumeGasMetering();
+
         // Mint tokens
         uint256 reserveAmount = vm.envUint("INITIAL_RESERVE_PROOF");
         bNgn.submitReserveProof(reserveAmount * 10 ** 18, 0, "ipfs://QmbFMke1KXqnYy1Y8bW8z1kY5Qz1Y8bW8z1kY5Qz1Y8bW8");
-        console.log("Submitted reserve proof by admin:", reserveAmount, "NGN fiat-backed");
+        console.log("Submitted reserve proof:", reserveAmount, "NGN");
+        vm.pauseGasMetering();
+        vm.sleep(2000);
+        vm.resumeGasMetering();
+
         uint256 mintAmount = reserveAmount * 10 ** 18;
-        console.log("Minting", mintAmount / 10 ** 18, "bNGN to admin:", admin);
         bNgn.mint(admin, mintAmount);
+        console.log("Minted", mintAmount / 10 ** 18, "bNGN to admin");
         console.log("Admin bNGN balance:", bNgn.balanceOf(admin) / 10 ** 18);
         vm.pauseGasMetering();
         vm.sleep(2000);
         vm.resumeGasMetering();
+
+        console.log("=== DEPLOYMENT COMPLETE ===");
+        console.log("Token:", address(bNgn));
+        console.log("Identity Registry:", address(identityRegistry));
+        console.log("Compliance:", address(compliance));
+        console.log("Admin Identity:", address(adminIdentity));
+        console.log("Agent Identity:", address(agentIdentity));
 
         vm.stopBroadcast();
     }

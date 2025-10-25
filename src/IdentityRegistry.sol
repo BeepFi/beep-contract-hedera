@@ -175,10 +175,8 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl {
                 /*string memory uri*/
             ) = _identity.getClaim(claimIds[i]);
             if (
-                topic == _topic &&
-                scheme == 1 &&
-                _isTrustedIssuer(issuer, trustedIssuers) &&
-                _verifyClaimSignature(_identity, _topic, issuer, signature, data)
+                topic == _topic && scheme == 1 && _isTrustedIssuer(issuer, trustedIssuers)
+                    && _verifyClaimSignature(_user, _topic, issuer, signature, data)
             ) {
                 return true;
             }
@@ -206,33 +204,17 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl {
      * @dev Validates that the claim was signed by the issuer
      */
     function _verifyClaimSignature(
-        IIdentity _identity,
+        address _user,
         uint256 _topic,
         address _issuer,
         bytes memory _signature,
         bytes memory _data
     ) internal view returns (bool) {
-        // Encode data for first keccak256
-        bytes memory encodedData = abi.encode(address(_identity), _topic, _data);
-        bytes32 dataHash;
+        bytes memory encodedData = abi.encode(_issuer, _topic, _user, _data);
+        bytes32 dataHash = keccak256(encodedData);
 
-        // Use inline assembly for keccak256
-        assembly {
-            let dataPtr := add(encodedData, 32)
-            let dataLength := mload(encodedData)
-            dataHash := keccak256(dataPtr, dataLength)
-        }
-
-        // Prepare prefixed message for second keccak256
-        bytes memory prefixedData = abi.encodePacked("\x19Ethereum Signed Message:\n32", dataHash);
-        bytes32 prefixedHash;
-
-        // Use inline assembly for second keccak256
-        assembly {
-            let prefixedPtr := add(prefixedData, 32)
-            let prefixedLength := mload(prefixedData)
-            prefixedHash := keccak256(prefixedPtr, prefixedLength)
-        }
+        // Prepare prefixed message
+        bytes32 prefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", dataHash));
 
         address recoveredSigner = _recoverSigner(prefixedHash, _signature);
 

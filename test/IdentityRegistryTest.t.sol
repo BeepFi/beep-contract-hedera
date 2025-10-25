@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Test, console2, Vm} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {MockIdentityRegistryStorage} from "../mocks/MockIdentityRegistryStorage.sol";
 import {MockClaimTopicsRegistry} from "../mocks/MockClaimTopicsRegistry.sol";
