@@ -90,6 +90,7 @@ contract Identity is IIdentity, Ownable {
     }
 
     function addClaim(
+        address user,
         uint256 _topic,
         uint256 _scheme,
         address _issuer,
@@ -97,25 +98,24 @@ contract Identity is IIdentity, Ownable {
         bytes calldata _data,
         string calldata _uri
     ) external override returns (bytes32) {
-        require(
-            msg.sender == owner() || keyHasPurpose(keccak256(abi.encode(msg.sender)), CLAIM_SIGNER_KEY),
-            "Caller not authorized"
-        );
+        require(user != address(0), "Invalid user address");
         require(_issuer != address(0), "Invalid issuer");
         require(_scheme == 1, "Only ECDSA scheme supported");
-        // Store claims for the owner of the contract
-        address user = owner();
-        bytes memory encodedData = abi.encode(_issuer, _topic, user);
-        bytes32 claimId;
+        require(msg.sender == _issuer || keyHasPurpose(keccak256(abi.encode(msg.sender)), 3), "Caller not authorized");
 
-        assembly {
-            let dataPtr := add(encodedData, 32)
-            let dataLength := mload(encodedData)
-            claimId := keccak256(dataPtr, dataLength)
-        }
+        // Encode data to be hashed
+        bytes memory encodedData = abi.encode(_issuer, _topic, user, _data);
+        bytes32 claimId = keccak256(encodedData);
 
-        claims[claimId] =
-            Claim({topic: _topic, scheme: _scheme, issuer: _issuer, signature: _signature, data: _data, uri: _uri});
+        // FIX: Match the prefix used in the test script
+        bytes32 prefixedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", claimId));
+
+        // Verify signature
+        (uint8 v, bytes32 r, bytes32 s) = splitSignature(_signature);
+        address signer = ecrecover(prefixedHash, v, r, s);
+        require(signer == _issuer, "Invalid signature");
+
+        claims[claimId] = Claim(_topic, _scheme, _issuer, _signature, _data, _uri);
         claimIdsByUserAndTopic[user][_topic].push(claimId);
         emit ClaimAdded(claimId, _topic, _scheme, _issuer, _signature, _data, _uri);
         return claimId;
@@ -160,5 +160,14 @@ contract Identity is IIdentity, Ownable {
 
     function getClaimIdsByTopic(address _user, uint256 _topic) external view override returns (bytes32[] memory) {
         return claimIdsByUserAndTopic[_user][_topic];
+    }
+
+    function splitSignature(bytes memory sig) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
+        require(sig.length == 65, "Invalid signature length");
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            v := byte(0, mload(add(sig, 96)))
+        }
     }
 }

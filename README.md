@@ -53,7 +53,7 @@ In Africa, 57% of the population (400M+) is unbanked, and Nigeria's $20B+ remitt
 - **Hedera Account**: Testnet account with HBAR
 Environment:
 ```bash
-    HEDERA_RPC_URL=https://localhost:7546 
+    HEDERA_RPC_URL=https://localhost:7546  # For Localnet, or https://testnet.hashio.io/api for Testnet
     HEDERA_PRIVATE_KEY=0x<hedera_private_key>
     AGENT_PRIVATE_KEY=0x<agent_private_key>
     PAUSER_PRIVATE_KEY=0x<pauser_private_key>
@@ -62,9 +62,14 @@ Environment:
     USER_PRIVATE_KEY=0x<user_private_key>
     IDENTITY_CONTRACT_PRIVATE_KEY=0x<identity_contract_private_key>
     INITIAL_RESERVE_PROOF=1000000
+
+    NEW_USER_ADDRESS=0x000000000000000000000000000000000044bf11
+    IDENTITY_CONTRACT=0x0a8f5ccC8450ABeB45588909e97611d514B6DcB5
+    IDENTITY_REGISTRY=0xDD6AE8Cc2bf530B467E05106C698dEBf9E7cEF9D
+    USER_COUNTRY_CODE=234 # Nigeria
+    KYC_VERIFICATION_DATA="KYC verified - NIN: 12345678901, DOB: 1990-01-01"
+    AML_VERIFICATION_DATA="AML clear - No sanctions matches, Risk: LOW"
 ```
-
-
 
 **Installation**
 

@@ -26,6 +26,7 @@ contract MockIdentity is IIdentity {
     }
 
     function addClaim(
+        address user,
         uint256 _topic,
         uint256 _scheme,
         address _issuer,
@@ -33,9 +34,10 @@ contract MockIdentity is IIdentity {
         bytes calldata _data,
         string calldata _uri
     ) external override returns (bytes32) {
-        bytes32 claimId = keccak256(abi.encode(_issuer, _topic, msg.sender));
+        require(user != address(0), "Invalid user address");
+        bytes32 claimId = keccak256(abi.encode(_issuer, _topic, user, _data));
         claims[claimId] = Claim(_topic, _scheme, _issuer, _signature, _data, _uri);
-        claimIdsByUserAndTopic[msg.sender][_topic].push(claimId);
+        claimIdsByUserAndTopic[user][_topic].push(claimId);
         return claimId;
     }
 
